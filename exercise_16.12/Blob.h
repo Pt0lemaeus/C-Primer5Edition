@@ -5,6 +5,7 @@
 #include <string>
 #include <stdexcept>
 #include <iostream>
+#include <iterator>
 
 template <typename> class BlobPtr;
 template <typename> class Blob;
@@ -150,8 +151,14 @@ bool operator==(const Blob<T>& lhs, const Blob<T>& rhs)
     return true;
 }
 
-template <typename T> class BlobPtr
+// BlobPtr throws an exception on attempts to access a nonexistent element
+template <typename T>
+bool operator==(const BlobPtr<T>&, const BlobPtr<T>&);
+
+template <typename T> class BlobPtr:public std::iterator<std::bidirectional_iterator_tag,T>
 {
+    friend bool
+        operator==<T>(const BlobPtr<T>&, const BlobPtr<T>&);
 public:
     BlobPtr(): curr(0){}
     BlobPtr(Blob<T> &a, size_t sz = 0):
@@ -177,6 +184,50 @@ private:
     std::size_t curr;
 };
 
+// equality operators
+template <typename T>
+bool operator==(const BlobPtr<T>&lhs, BlobPtr<T> &rhs)
+{
+    return lhs.wptr.lock().get() == rhs.wptr.lock().get() &&
+        lhs.curr == rhs.curr;
+}
+
+template <typename T>
+bool operator!=(const BlobPtr<T> &lhs, const BlobPtr<T> &rhs)
+{
+    return !(lhs == rhs);
+}
+
+// check member
+template<typename T>
+std::shared_ptr<std::vector<T>>
+BlobPtr<T>::check(std::size_t i, const std::string &msg) const
+{
+    auto ret = wptr.lock(); //is the vector still round?
+    if (!ret)
+        throw std::runtime_error("unbound BlobPtr");
+    if (i >= ret->size())
+        throw std::out_of_range(msg);
+    return ret;
+}
+
+template <typename T>
+BlobPtr<T> BlobPtr<T>::operator++()
+{
+    check(curr, "increment past end of the container, can't increment it");
+    ++curr;
+    return *this;
+}
+
+template <typename T>
+BlobPtr<T> BlobPtr<T>::operator--()
+{
+    --curr;
+    check(curr, "decrement past begin of the container, can't decrement it");
+    --curr;
+    return *this;
+}
+
 template <typename T>
 BlobPtr<T> BlobPtr<T>::operator++(int)
 {
@@ -191,4 +242,24 @@ BlobPtr<T> BlobPtr<T>::operator--(int)
     BlobPtr ret = *this;
     --*this;
     return ret;
+}
+
+template <typename T>
+BlobPtr<T> BlobPtr<T>::operator+(int n)
+{
+    for (int i = 0; i < n; ++i)
+    {
+        ++(*this);
+    }
+    return *this;
+}
+
+template <typename T>
+BlobPtr<T> BlobPtr<T>::operator-(int n)
+{
+    for (int i = 0; i < n; ++i)
+    {
+        --(*this);
+    }
+    return *this;
 }
